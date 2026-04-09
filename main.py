@@ -1,84 +1,85 @@
+import argparse
 import os
+from typing import List, Union
+
 import torch
-import time
-from typing import Any, Union
 
-from src.utils.patch_bugs import *
-from lightning import Trainer, LightningModule
-
-from src.lightning_data import DataModule
-from src.lightning_model import LightningModel
-from lightning.pytorch.cli import LightningCLI, LightningArgumentParser, SaveConfigCallback
-
-import logging
-logger = logging.getLogger("lightning.pytorch")
-# log_path = os.path.join( f"log.txt")
-# logger.addHandler(logging.FileHandler(log_path))
-
-class ReWriteRootSaveConfigCallback(SaveConfigCallback):
-    def save_config(self, trainer: Trainer, pl_module: LightningModule, stage: str) -> None:
-        stamp = time.strftime('%y%m%d%H%M')
-        file_path = os.path.join(trainer.default_root_dir, f"config-{stage}-{stamp}.yaml")
-        self.parser.save(
-            self.config, file_path, skip_none=False, overwrite=self.overwrite, multifile=self.multifile
-        )
+from src.pixnerd_diffusers.pipeline import PixNerdPipeline
+from src.pixnerd_diffusers.training import build_arg_parser as build_train_parser
+from src.pixnerd_diffusers.training import train
 
 
-class ReWriteRootDirCli(LightningCLI):
-    def before_instantiate_classes(self) -> None:
-        super().before_instantiate_classes()
-        config_trainer = self._get(self.config, "trainer", default={})
+def parse_conditioning_inputs(prompt: str, class_label: str) -> Union[List[str], List[int]]:
+    if prompt:
+        return [entry.strip() for entry in prompt.split("|||") if entry.strip()]
+    if class_label:
+        return [int(entry.strip()) for entry in class_label.split(",") if entry.strip()]
+    raise ValueError("Either --prompt or --class_label must be provided.")
 
-        # predict path & logger check
-        if self.subcommand == "predict":
-            config_trainer.logger = None
 
-    def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
-        class TagsClass:
-            def __init__(self, exp:str):
-                ...
-        parser.add_class_arguments(TagsClass, nested_key="tags")
+def run_sample(args: argparse.Namespace) -> None:
+    dtype = torch.bfloat16 if args.dtype == "bf16" else torch.float16 if args.dtype == "fp16" else torch.float32
+    pipeline = PixNerdPipeline.from_config(
+        config_path=args.config,
+        checkpoint_path=args.checkpoint_path,
+        use_ema=not args.disable_ema,
+        torch_dtype=dtype,
+        device=args.device,
+    )
 
-    def add_default_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
-        super().add_default_arguments_to_parser(parser)
-        parser.add_argument("--torch_hub_dir", type=str, default=None, help=("torch hub dir"),)
-        parser.add_argument("--huggingface_cache_dir", type=str, default=None, help=("huggingface hub dir"),)
+    conditioning = parse_conditioning_inputs(args.prompt, args.class_label)
+    output = pipeline(
+        y=conditioning,
+        num_images_per_prompt=args.num_images_per_prompt,
+        seed=args.seed,
+        height=args.height,
+        width=args.width,
+        num_inference_steps=args.num_steps,
+        guidance_scale=args.guidance_scale,
+        timeshift=args.timeshift,
+        order=args.order,
+        output_type="pil",
+    ).images
 
-    def instantiate_trainer(self, **kwargs: Any) -> Trainer:
-        config_trainer = self._get(self.config_init, "trainer", default={})
-        default_root_dir = config_trainer.get("default_root_dir", None)
+    os.makedirs(args.output_dir, exist_ok=True)
+    for index, image in enumerate(output):
+        image.save(os.path.join(args.output_dir, f"sample_{index:04d}.png"))
+    print(f"Saved {len(output)} images to {args.output_dir}")
 
-        if default_root_dir is None:
-            default_root_dir = os.path.join(os.getcwd(), "workdirs")
 
-        dirname = ""
-        for v, k in self._get(self.config, "tags", default={}).items():
-            dirname += f"{v}_{k}"
-        default_root_dir = os.path.join(default_root_dir, dirname)
-        is_resume = self._get(self.config_init, "ckpt_path", default=None)
-        if os.path.exists(default_root_dir) and "debug" not in default_root_dir:
-            if os.listdir(default_root_dir) and self.subcommand != "predict" and not is_resume:
-                raise FileExistsError(f"{default_root_dir} already exists")
+def main():
+    parser = argparse.ArgumentParser(description="PixNerd Diffusers-style entrypoint")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
-        config_trainer.default_root_dir = default_root_dir
-        trainer = super().instantiate_trainer(**kwargs)
-        if trainer.is_global_zero:
-            os.makedirs(default_root_dir, exist_ok=True)
-        return trainer
+    train_parent = build_train_parser(add_help=False)
+    subparsers.add_parser("train", parents=[train_parent], help="Accelerate-based training")
 
-    def instantiate_classes(self) -> None:
-        torch_hub_dir = self._get(self.config, "torch_hub_dir")
-        huggingface_cache_dir = self._get(self.config, "huggingface_cache_dir")
-        if huggingface_cache_dir is not None:
-            os.environ["HUGGINGFACE_HUB_CACHE"] = huggingface_cache_dir
-        if torch_hub_dir is not None:
-            os.environ["TORCH_HOME"] = torch_hub_dir
-            torch.hub.set_dir(torch_hub_dir)
-        super().instantiate_classes()
+    sample_parser = subparsers.add_parser("sample", help="Run inference through DiffusionPipeline")
+    sample_parser.add_argument("--config", type=str, required=True)
+    sample_parser.add_argument("--checkpoint_path", type=str, default=None)
+    sample_parser.add_argument("--prompt", type=str, default=None, help="Use ||| to separate prompts.")
+    sample_parser.add_argument("--class_label", type=str, default=None, help="Comma separated class labels.")
+    sample_parser.add_argument("--num_images_per_prompt", type=int, default=1)
+    sample_parser.add_argument("--seed", type=int, default=0)
+    sample_parser.add_argument("--height", type=int, default=512)
+    sample_parser.add_argument("--width", type=int, default=512)
+    sample_parser.add_argument("--num_steps", type=int, default=None)
+    sample_parser.add_argument("--guidance_scale", type=float, default=None)
+    sample_parser.add_argument("--timeshift", type=float, default=None)
+    sample_parser.add_argument("--order", type=int, default=None)
+    sample_parser.add_argument("--disable_ema", action="store_true")
+    sample_parser.add_argument("--dtype", choices=["fp32", "fp16", "bf16"], default="bf16")
+    sample_parser.add_argument("--device", type=str, default="cuda")
+    sample_parser.add_argument("--output_dir", type=str, default="samples")
+
+    args = parser.parse_args()
+    if args.command == "train":
+        train(args)
+    elif args.command == "sample":
+        run_sample(args)
+    else:
+        raise ValueError(f"Unknown command: {args.command}")
+
 
 if __name__ == "__main__":
-
-    cli = ReWriteRootDirCli(LightningModel, DataModule,
-                            auto_configure_optimizers=False,
-                            save_config_callback=ReWriteRootSaveConfigCallback,
-                            save_config_kwargs={"overwrite": True})
+    main()
