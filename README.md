@@ -58,6 +58,14 @@ python main.py sample \
   --output_dir samples
 ```
 
+Python API:
+```python
+from diffusers import DiffusionPipeline
+
+pipe = DiffusionPipeline.from_pretrained("path/to/checkpoint", custom_pipeline="src.pixnerd_diffusers.pipeline")
+images = pipe(prompt="a photo of a cat", num_inference_steps=25, guidance_scale=4.0).images
+```
+
 ```bash
 # for training
 python main.py train \

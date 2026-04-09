@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any, Dict
+from typing import Any, Dict, Iterable, Optional
 
+import torch
 from omegaconf import DictConfig, OmegaConf
 
 
@@ -40,3 +41,22 @@ def instantiate_from_spec(spec: Any) -> Any:
 
 def clone_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
     return to_container(OmegaConf.create(to_container(spec)))
+
+
+def load_prefixed_state_dict(
+    module: Optional[torch.nn.Module],
+    state_dict: Dict[str, torch.Tensor],
+    prefixes: Iterable[str],
+) -> bool:
+    if module is None:
+        return False
+    for prefix in prefixes:
+        subset = {
+            key[len(prefix) :]: value
+            for key, value in state_dict.items()
+            if key.startswith(prefix)
+        }
+        if subset:
+            module.load_state_dict(subset, strict=False)
+            return True
+    return False

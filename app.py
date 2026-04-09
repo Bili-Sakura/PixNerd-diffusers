@@ -5,6 +5,10 @@ import gradio as gr
 from huggingface_hub import snapshot_download
 
 from src.pixnerd_diffusers.pipeline import PixNerdPipeline
+from src.pixnerd_diffusers.scheduler import PixNerdFlowMatchScheduler
+from src.pixnerd_diffusers.transformer import PixNerdTransformer2DModel
+from src.pixnerd_diffusers.config_utils import to_container
+from omegaconf import OmegaConf
 
 
 if __name__ == "__main__":
@@ -23,18 +27,33 @@ if __name__ == "__main__":
         ckpt_path = args.ckpt_path
 
     dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
-    pipeline = PixNerdPipeline.from_config(
-        config_path=args.config,
-        checkpoint_path=ckpt_path,
-        torch_dtype=dtype,
-        device=args.device,
+    config = OmegaConf.load(args.config)
+    model_cfg = to_container(config.model)
+    transformer = PixNerdTransformer2DModel.from_project_config(model_cfg, use_ema=True)
+    transformer.load_legacy_checkpoint(ckpt_path)
+    transformer = transformer.to(dtype=dtype, device=args.device)
+    sampler_cfg = model_cfg.get("diffusion_sampler", {}).get("init_args", {})
+    scheduler = PixNerdFlowMatchScheduler(
+        num_inference_steps=sampler_cfg.get("num_steps", 25),
+        guidance_scale=sampler_cfg.get("guidance", 4.0),
+        timeshift=sampler_cfg.get("timeshift", 3.0),
+        order=sampler_cfg.get("order", 2),
+        guidance_interval_min=sampler_cfg.get("guidance_interval_min", 0.0),
+        guidance_interval_max=sampler_cfg.get("guidance_interval_max", 1.0),
+        last_step=sampler_cfg.get("last_step", None),
     )
+    pipeline = PixNerdPipeline(
+        vae=transformer.vae,
+        conditioner=transformer.conditioner,
+        transformer=transformer.get_inference_denoiser(use_ema=True),
+        scheduler=scheduler,
+    ).to(args.device)
 
     def generate(prompt, num_images, seed, image_height, image_width, num_steps, guidance, timeshift, order):
         images = pipeline(
-            y=prompt,
+            prompt=prompt,
             num_images_per_prompt=int(num_images),
-            seed=int(seed),
+            generator=torch.Generator(device="cpu").manual_seed(int(seed)),
             height=int(image_height),
             width=int(image_width),
             num_inference_steps=int(num_steps),

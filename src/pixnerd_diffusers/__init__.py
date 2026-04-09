@@ -1,7 +1,9 @@
-from .model_wrapper import PixNerdModelWrapper
 from .pipeline import PixNerdPipeline
+from .scheduler import PixNerdFlowMatchScheduler
+from .transformer import PixNerdTransformer2DModel
 
 __all__ = [
-    "PixNerdModelWrapper",
     "PixNerdPipeline",
+    "PixNerdFlowMatchScheduler",
+    "PixNerdTransformer2DModel",
 ]
