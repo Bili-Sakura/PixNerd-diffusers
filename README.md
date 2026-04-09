@@ -35,10 +35,10 @@ We provide online demos for PixNerd-XXL/16(text-to-image) on HuggingFace Spaces.
 
 HF spaces: [https://huggingface.co/spaces/MCG-NJU/PixNerd](https://huggingface.co/spaces/MCG-NJU/PixNerd)
 
-To host the local gradio demo, run the following command:
+To host the local gradio demo (Diffusers-style pipeline), run:
 ```bash
 # for text-to-image applications
-python app.py --config configs_t2i/inference_heavydecoder.yaml  --ckpt_path=XXX.ckpt
+python app.py --config configs_t2i/inference_heavydecoder.yaml --ckpt_path=XXX.ckpt
 ```
 
 ## Usages
@@ -49,16 +49,29 @@ pip install -r requirements.txt
 ```
 
 ```bash
-# for inference
-python main.py predict -c configs_c2i/pix256std1_repa_pixnerd_xl.yaml --ckpt_path=XXX.ckpt
-# # or specify the GPU(s) to use with as :
-CUDA_VISIBLE_DEVICES=0,1, python main.py predict -c configs_c2i/pix256std1_repa_pixnerd_xl.yaml --ckpt_path=XXX.ckpt
+# inference (DiffusionPipeline)
+python main.py sample \
+  --config configs_c2i/pix256std1_repa_pixnerd_xl.yaml \
+  --checkpoint_path XXX.ckpt \
+  --class_label 207 \
+  --num_images_per_prompt 4 \
+  --output_dir samples
+```
+
+Python API:
+```python
+from diffusers import DiffusionPipeline
+
+pipe = DiffusionPipeline.from_pretrained("path/to/checkpoint", custom_pipeline="src.pixnerd_diffusers.pipeline")
+images = pipe(prompt="a photo of a cat", num_inference_steps=25, guidance_scale=4.0).images
 ```
 
 ```bash
 # for training
-# train
-python main.py fit -c configs_c2i/pix256std1_repa_pixnerd_xl.yaml
+python main.py train \
+  --config configs_c2i/pix256std1_repa_pixnerd_xl.yaml \
+  --output_dir workdirs/pixnerd_xl \
+  --max_steps 800000
 ```
 For T2i, we use GenEval and DPG to collect metrics.
 
