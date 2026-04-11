@@ -3,14 +3,10 @@ import os
 from typing import List, Union
 
 import torch
-from omegaconf import OmegaConf
 
-from src.pixnerd_diffusers.pipeline import PixNerdPipeline
-from src.pixnerd_diffusers.scheduler import PixNerdFlowMatchScheduler
-from src.pixnerd_diffusers.transformer import PixNerdTransformer2DModel
+from src.pixnerd_diffusers import PixNerdFlowMatchScheduler, PixNerdPipeline, PixNerdTransformer2DModel
 from src.pixnerd_diffusers.training import build_arg_parser as build_train_parser
 from src.pixnerd_diffusers.training import train
-from src.pixnerd_diffusers.config_utils import to_container
 
 
 def parse_conditioning_inputs(prompt: str, class_label: str) -> Union[List[str], List[int]]:
@@ -23,30 +19,23 @@ def parse_conditioning_inputs(prompt: str, class_label: str) -> Union[List[str],
 
 def run_sample(args: argparse.Namespace) -> None:
     dtype = torch.bfloat16 if args.dtype == "bf16" else torch.float16 if args.dtype == "fp16" else torch.float32
-    config = OmegaConf.load(args.config)
-    model_cfg = to_container(config.model)
-
-    if args.checkpoint_path and os.path.isdir(args.checkpoint_path) and os.path.exists(
-        os.path.join(args.checkpoint_path, "transformer", "config.json")
-    ):
+    if os.path.isdir(args.pretrained_model_name_or_path):
         transformer = PixNerdTransformer2DModel.from_pretrained(
-            os.path.join(args.checkpoint_path, "transformer"),
+            os.path.join(args.pretrained_model_name_or_path, "transformer"),
             low_cpu_mem_usage=False,
         )
-        scheduler = PixNerdFlowMatchScheduler.from_pretrained(os.path.join(args.checkpoint_path, "scheduler"))
+        scheduler = PixNerdFlowMatchScheduler.from_pretrained(
+            os.path.join(args.pretrained_model_name_or_path, "scheduler")
+        )
     else:
-        transformer = PixNerdTransformer2DModel.from_project_config(model_cfg, use_ema=not args.disable_ema)
-        if args.checkpoint_path:
-            transformer.load_legacy_checkpoint(args.checkpoint_path)
-        scheduler_cfg = model_cfg.get("diffusion_sampler", {}).get("init_args", {})
-        scheduler = PixNerdFlowMatchScheduler(
-            num_inference_steps=scheduler_cfg.get("num_steps", 25),
-            guidance_scale=scheduler_cfg.get("guidance", 4.0),
-            timeshift=scheduler_cfg.get("timeshift", 3.0),
-            order=scheduler_cfg.get("order", 2),
-            guidance_interval_min=scheduler_cfg.get("guidance_interval_min", 0.0),
-            guidance_interval_max=scheduler_cfg.get("guidance_interval_max", 1.0),
-            last_step=scheduler_cfg.get("last_step", None),
+        transformer = PixNerdTransformer2DModel.from_pretrained(
+            args.pretrained_model_name_or_path,
+            subfolder="transformer",
+            low_cpu_mem_usage=False,
+        )
+        scheduler = PixNerdFlowMatchScheduler.from_pretrained(
+            args.pretrained_model_name_or_path,
+            subfolder="scheduler",
         )
 
     transformer = transformer.to(dtype=dtype)
@@ -85,8 +74,7 @@ def main():
     subparsers.add_parser("train", parents=[train_parent], help="Accelerate-based training")
 
     sample_parser = subparsers.add_parser("sample", help="Run inference through DiffusionPipeline")
-    sample_parser.add_argument("--config", type=str, required=True)
-    sample_parser.add_argument("--checkpoint_path", type=str, default=None)
+    sample_parser.add_argument("--pretrained_model_name_or_path", type=str, required=True)
     sample_parser.add_argument("--prompt", type=str, default=None, help="Use ||| to separate prompts.")
     sample_parser.add_argument("--class_label", type=str, default=None, help="Comma separated class labels.")
     sample_parser.add_argument("--num_images_per_prompt", type=int, default=1)

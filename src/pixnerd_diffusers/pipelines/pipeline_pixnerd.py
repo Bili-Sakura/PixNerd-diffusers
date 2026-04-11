@@ -10,7 +10,7 @@ from diffusers.utils import BaseOutput
 from PIL import Image
 
 from src.models.autoencoder.base import fp2uint8
-from src.pixnerd_diffusers.scheduler import PixNerdFlowMatchScheduler
+from src.pixnerd_diffusers.schedulers.scheduling_pixnerd_flow_match import PixNerdFlowMatchScheduler
 
 
 ConditioningInput = Union[str, int, Sequence[Union[str, int]]]
