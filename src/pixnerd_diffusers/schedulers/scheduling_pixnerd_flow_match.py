@@ -182,6 +182,12 @@ class PixNerdFlowMatchScheduler(SchedulerMixin, ConfigMixin):
     def scale_model_input(self, sample: torch.Tensor, timestep: Optional[torch.Tensor] = None) -> torch.Tensor:
         return sample
 
+    def classifier_free_guidance(self, model_output: torch.Tensor) -> torch.Tensor:
+        if model_output.shape[0] % 2 != 0:
+            raise ValueError("Classifier-free guidance expects concatenated unconditional/conditional batches.")
+        uncond, cond = model_output.chunk(2, dim=0)
+        return uncond + self.guidance_scale * (cond - uncond)
+
     def step(
         self,
         model_output: torch.Tensor,
