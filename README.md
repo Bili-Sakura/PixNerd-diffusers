@@ -38,7 +38,7 @@ HF spaces: [https://huggingface.co/spaces/MCG-NJU/PixNerd](https://huggingface.c
 To host the local gradio demo (Diffusers-style pipeline), run:
 ```bash
 # for text-to-image applications
-python app.py --config configs_t2i/inference_heavydecoder.yaml --ckpt_path=XXX.ckpt
+python app.py --pretrained_model_name_or_path MCG-NJU/PixNerd-XXL-P16-T2I
 ```
 
 ## Usages
@@ -51,8 +51,7 @@ pip install -r requirements.txt
 ```bash
 # inference (DiffusionPipeline)
 python main.py sample \
-  --config configs_c2i/pix256std1_repa_pixnerd_xl.yaml \
-  --checkpoint_path XXX.ckpt \
+  --pretrained_model_name_or_path path/to/checkpoint \
   --class_label 207 \
   --num_images_per_prompt 4 \
   --output_dir samples

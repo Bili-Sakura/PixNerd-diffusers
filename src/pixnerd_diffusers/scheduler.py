@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.schedulers.scheduling_utils import SchedulerMixin
 from diffusers.utils import BaseOutput
-
-from src.diffusion.flow_matching.adam_sampling import AdamLMSampler
-from src.diffusion.flow_matching.scheduling import LinearScheduler
-
 
 @dataclass
 class PixNerdSchedulerOutput(BaseOutput):
@@ -25,6 +21,65 @@ class PixNerdFlowMatchScheduler(SchedulerMixin, ConfigMixin):
     config_name = "scheduler_config.json"
     order = 1
     init_noise_sigma = 1.0
+
+    @staticmethod
+    def _lagrange_coeffs(order: int, pre_ts: torch.Tensor, int_t_start: torch.Tensor, int_t_end: torch.Tensor) -> List[float]:
+        ts = [float(v) for v in pre_ts[-order:].tolist()]
+        a = float(int_t_start)
+        b = float(int_t_end)
+
+        if order == 1:
+            return [1.0]
+        if order == 2:
+            t1, t2 = ts
+            int1 = 0.5 / (t1 - t2) * ((b - t2) ** 2 - (a - t2) ** 2)
+            int2 = 0.5 / (t2 - t1) * ((b - t1) ** 2 - (a - t1) ** 2)
+            total = int1 + int2
+            return [int1 / total, int2 / total]
+        if order == 3:
+            t1, t2, t3 = ts
+            int1_denom = (t1 - t2) * (t1 - t3)
+            int1 = ((1 / 3) * b**3 - 0.5 * (t2 + t3) * b**2 + (t2 * t3) * b) - (
+                (1 / 3) * a**3 - 0.5 * (t2 + t3) * a**2 + (t2 * t3) * a
+            )
+            int1 = int1 / int1_denom
+            int2_denom = (t2 - t1) * (t2 - t3)
+            int2 = ((1 / 3) * b**3 - 0.5 * (t1 + t3) * b**2 + (t1 * t3) * b) - (
+                (1 / 3) * a**3 - 0.5 * (t1 + t3) * a**2 + (t1 * t3) * a
+            )
+            int2 = int2 / int2_denom
+            int3_denom = (t3 - t1) * (t3 - t2)
+            int3 = ((1 / 3) * b**3 - 0.5 * (t1 + t2) * b**2 + (t1 * t2) * b) - (
+                (1 / 3) * a**3 - 0.5 * (t1 + t2) * a**2 + (t1 * t2) * a
+            )
+            int3 = int3 / int3_denom
+            total = int1 + int2 + int3
+            return [int1 / total, int2 / total, int3 / total]
+        if order == 4:
+            t1, t2, t3, t4 = ts
+            int1_denom = (t1 - t2) * (t1 - t3) * (t1 - t4)
+            int1 = ((1 / 4) * b**4 - (1 / 3) * (t2 + t3 + t4) * b**3 + 0.5 * (t3 * t4 + t2 * t3 + t2 * t4) * b**2 - (t2 * t3 * t4) * b) - (
+                (1 / 4) * a**4 - (1 / 3) * (t2 + t3 + t4) * a**3 + 0.5 * (t3 * t4 + t2 * t3 + t2 * t4) * a**2 - (t2 * t3 * t4) * a
+            )
+            int1 = int1 / int1_denom
+            int2_denom = (t2 - t1) * (t2 - t3) * (t2 - t4)
+            int2 = ((1 / 4) * b**4 - (1 / 3) * (t1 + t3 + t4) * b**3 + 0.5 * (t3 * t4 + t1 * t3 + t1 * t4) * b**2 - (t1 * t3 * t4) * b) - (
+                (1 / 4) * a**4 - (1 / 3) * (t1 + t3 + t4) * a**3 + 0.5 * (t3 * t4 + t1 * t3 + t1 * t4) * a**2 - (t1 * t3 * t4) * a
+            )
+            int2 = int2 / int2_denom
+            int3_denom = (t3 - t1) * (t3 - t2) * (t3 - t4)
+            int3 = ((1 / 4) * b**4 - (1 / 3) * (t1 + t2 + t4) * b**3 + 0.5 * (t4 * t2 + t1 * t2 + t1 * t4) * b**2 - (t1 * t2 * t4) * b) - (
+                (1 / 4) * a**4 - (1 / 3) * (t1 + t2 + t4) * a**3 + 0.5 * (t4 * t2 + t1 * t2 + t1 * t4) * a**2 - (t1 * t2 * t4) * a
+            )
+            int3 = int3 / int3_denom
+            int4_denom = (t4 - t1) * (t4 - t2) * (t4 - t3)
+            int4 = ((1 / 4) * b**4 - (1 / 3) * (t1 + t2 + t3) * b**3 + 0.5 * (t3 * t2 + t1 * t2 + t1 * t3) * b**2 - (t1 * t2 * t3) * b) - (
+                (1 / 4) * a**4 - (1 / 3) * (t1 + t2 + t3) * a**3 + 0.5 * (t3 * t2 + t1 * t2 + t1 * t3) * a**2 - (t1 * t2 * t3) * a
+            )
+            int4 = int4 / int4_denom
+            total = int1 + int2 + int3 + int4
+            return [int1 / total, int2 / total, int3 / total, int4 / total]
+        raise ValueError(f"Unsupported solver order: {order}.")
 
     @register_to_config
     def __init__(
@@ -67,18 +122,32 @@ class PixNerdFlowMatchScheduler(SchedulerMixin, ConfigMixin):
         self._model_outputs = []
         self._step_index = 0
 
-    def _build_solver(self, num_inference_steps: int, timeshift: float) -> AdamLMSampler:
-        return AdamLMSampler(
-            order=self.order,
-            scheduler=LinearScheduler(),
-            guidance_fn=None,
-            num_steps=num_inference_steps,
-            guidance=self.guidance_scale,
-            timeshift=timeshift,
-            guidance_interval_min=self.guidance_interval_min,
-            guidance_interval_max=self.guidance_interval_max,
-            last_step=self.last_step,
-        )
+    @staticmethod
+    def _shift_respace_fn(t: torch.Tensor, shift: float = 3.0) -> torch.Tensor:
+        return t / (t + (1 - t) * shift)
+
+    def _build_solver_state(
+        self,
+        num_inference_steps: int,
+        timeshift: float,
+        device: Optional[Union[str, torch.device]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, List[List[float]]]:
+        last_step = self.last_step
+        if last_step is None:
+            last_step = 1.0 / float(num_inference_steps)
+
+        endpoints = torch.linspace(0.0, 1 - float(last_step), int(num_inference_steps), dtype=torch.float32)
+        endpoints = torch.cat([endpoints, torch.tensor([1.0], dtype=torch.float32)], dim=0)
+        timesteps = self._shift_respace_fn(endpoints, timeshift).to(device=device)
+        timedeltas = (timesteps[1:] - timesteps[:-1]).to(device=device)
+
+        solver_coeffs: List[List[float]] = [[] for _ in range(int(num_inference_steps))]
+        for i in range(int(num_inference_steps)):
+            order = min(self.order, i + 1, self.order)
+            pre_ts = timesteps[: i + 1]
+            coeffs = self._lagrange_coeffs(order, pre_ts, pre_ts[i], timesteps[i + 1])
+            solver_coeffs[i] = coeffs
+        return timesteps[:-1], timedeltas, solver_coeffs
 
     def set_timesteps(
         self,
@@ -98,11 +167,14 @@ class PixNerdFlowMatchScheduler(SchedulerMixin, ConfigMixin):
         if order is not None:
             self.order = int(order)
 
-        solver = self._build_solver(self.num_inference_steps, self.timeshift)
-        # AdamLMSampler stores num_steps + 1 endpoints; model evaluations happen for the first num_steps only.
-        self.timesteps = solver.timesteps[:-1].to(device=device)
-        self._timedeltas = solver.timedeltas.to(device=device)
-        self._solver_coeffs = solver.solver_coeffs
+        timesteps, timedeltas, solver_coeffs = self._build_solver_state(
+            self.num_inference_steps,
+            self.timeshift,
+            device=device,
+        )
+        self.timesteps = timesteps
+        self._timedeltas = timedeltas
+        self._solver_coeffs = solver_coeffs
         self._model_outputs = []
         self._step_index = 0
 

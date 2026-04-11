@@ -166,8 +166,6 @@ def train(args: argparse.Namespace) -> None:
         scheduler = PixNerdFlowMatchScheduler.from_pretrained(os.path.join(args.resume_from, "scheduler"))
     else:
         transformer = PixNerdTransformer2DModel.from_project_config(model_config, use_ema=True)
-        if args.legacy_checkpoint is not None:
-            transformer.load_legacy_checkpoint(args.legacy_checkpoint)
         scheduler_cfg = model_config.get("diffusion_sampler", {})
         scheduler = PixNerdFlowMatchScheduler.from_sampler_spec(scheduler_cfg)
 
@@ -296,7 +294,6 @@ def build_arg_parser(add_help: bool = True) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Train PixNerd in diffusers style.", add_help=add_help)
     parser.add_argument("--config", type=str, required=True, help="Path to OmegaConf yaml config.")
     parser.add_argument("--output_dir", type=str, required=True, help="Checkpoint output directory.")
-    parser.add_argument("--legacy_checkpoint", type=str, default=None, help="Legacy .ckpt to initialize from.")
     parser.add_argument("--resume_from", type=str, default=None, help="Directory saved with save_pretrained.")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--max_steps", type=int, default=None)

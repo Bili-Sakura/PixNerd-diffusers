@@ -188,28 +188,3 @@ class PixNerdTransformer2DModel(ModelMixin, ConfigMixin):
             uncondition,
             metadata,
         )
-
-    @staticmethod
-    def _load_prefixed_state(
-        module: Optional[torch.nn.Module],
-        state_dict: Dict[str, torch.Tensor],
-        prefixes: Iterable[str],
-    ) -> None:
-        if module is None:
-            return
-        for prefix in prefixes:
-            subset = {
-                key[len(prefix) :]: value
-                for key, value in state_dict.items()
-                if key.startswith(prefix)
-            }
-            if subset:
-                module.load_state_dict(subset, strict=False)
-                return
-
-    def load_legacy_checkpoint(self, checkpoint_path: str) -> None:
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")
-        state_dict = checkpoint.get("state_dict", checkpoint)
-        self._load_prefixed_state(self.denoiser, state_dict, prefixes=["denoiser."])
-        self._load_prefixed_state(self.ema_denoiser, state_dict, prefixes=["ema_denoiser."])
-        self._load_prefixed_state(self.diffusion_trainer, state_dict, prefixes=["diffusion_trainer."])
