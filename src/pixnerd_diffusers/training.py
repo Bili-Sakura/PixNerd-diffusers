@@ -15,8 +15,7 @@ from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
 from src.pixnerd_diffusers.config_utils import instantiate_from_spec, load_symbol, to_container
-from src.pixnerd_diffusers.models.modeling_pixnerd_transformer_2d import PixNerdTransformer2DModel
-from src.pixnerd_diffusers.schedulers.scheduling_pixnerd_flow_match import PixNerdFlowMatchScheduler
+from src.pixnerd_diffusers import PixNerdFlowMatchScheduler, PixNerdTransformer2DModel
 
 logger = get_logger(__name__, log_level="INFO")
 

@@ -3,9 +3,7 @@ import argparse
 import torch
 import gradio as gr
 
-from src.pixnerd_diffusers.models.modeling_pixnerd_transformer_2d import PixNerdTransformer2DModel
-from src.pixnerd_diffusers.pipelines.pipeline_pixnerd import PixNerdPipeline
-from src.pixnerd_diffusers.schedulers.scheduling_pixnerd_flow_match import PixNerdFlowMatchScheduler
+from src.pixnerd_diffusers import PixNerdFlowMatchScheduler, PixNerdPipeline, PixNerdTransformer2DModel
 
 
 if __name__ == "__main__":
