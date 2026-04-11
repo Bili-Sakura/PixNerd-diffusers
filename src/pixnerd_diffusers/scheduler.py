@@ -23,10 +23,10 @@ class PixNerdFlowMatchScheduler(SchedulerMixin, ConfigMixin):
     init_noise_sigma = 1.0
 
     @staticmethod
-    def _lagrange_coeffs(order: int, pre_ts: torch.Tensor, int_t_start: torch.Tensor, int_t_end: torch.Tensor) -> List[float]:
+    def _lagrange_coeffs(order: int, pre_ts: torch.Tensor, t_start: torch.Tensor, t_end: torch.Tensor) -> List[float]:
         ts = [float(v) for v in pre_ts[-order:].tolist()]
-        a = float(int_t_start)
-        b = float(int_t_end)
+        a = float(t_start)
+        b = float(t_end)
 
         if order == 1:
             return [1.0]
@@ -143,7 +143,7 @@ class PixNerdFlowMatchScheduler(SchedulerMixin, ConfigMixin):
 
         solver_coeffs: List[List[float]] = [[] for _ in range(int(num_inference_steps))]
         for i in range(int(num_inference_steps)):
-            order = min(self.order, i + 1, self.order)
+            order = min(self.order, i + 1)
             pre_ts = timesteps[: i + 1]
             coeffs = self._lagrange_coeffs(order, pre_ts, pre_ts[i], timesteps[i + 1])
             solver_coeffs[i] = coeffs
