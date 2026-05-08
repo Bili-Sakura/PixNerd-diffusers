@@ -1,55 +1,31 @@
-# PixNerd: Pixel Neural Field Diffusion
-<div style="text-align: center;">
-  <a href="http://arxiv.org/abs/2507.23268"><img src="https://img.shields.io/badge/arXiv-2507.23268-b31b1b.svg" alt="arXiv"></a>
-    <a href="https://huggingface.co/spaces/MCG-NJU/PixNerd"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Online_Demo-green" alt="arXiv"></a>  
-</div>
+# PixNerd Diffusers Refactor
 
-![](./figs/arch.png)
+This repository is refactored to a Diffusers-first inference flow inspired by
+[NiT-diffusers](https://github.com/Bili-Sakura/NiT-diffusers):
 
-## Introduction
-We propose PixNerd, a powerful and efficient **pixel-space** diffusion transformer for image generation (without VAE). Different from conventional pixel diffusion models, we employ the neural field to improve the high frequercy modeling .
+- legacy `src/diffusion/*` training/sampling stack removed
+- runtime entrypoints use `diffusers.DiffusionPipeline.from_pretrained(...)`
+- PixNerd custom model/scheduler/pipeline stay in `src/pixnerd_diffusers`
 
-* We achieve **1.93 FID** on ImageNet256x256 Benchmark with PixNerd-XL/16 (1600k training steps).
-* We achieve **2.84 FID** on ImageNet512x512 Benchmark with PixNerd-XL/16.
-* We achieve **0.73 overall score** on GenEval Benchmark with PixNerd-XXL/16.
-* We achieve **80.9 avergae score** on DPG Benchmark with PixNerd-XXL/16.
+## Install
 
-## Visualizations
-![](./figs/pixelnerd_teaser.png)
-![](./figs/pixnerd_multires.png)
-## Checkpoints
-
-| Dataset       | Model         | Params | FID   | HuggingFace                           |
-|---------------|---------------|--------|-------|---------------------------------------|
-| ImageNet256   | PixNerd-XL/16 | 700M   | 1.93  | [🤗](https://huggingface.co/MCG-NJU/PixNerd-XL-P16-C2I) |
-| ImageNet512(FT from 256 for 200K steps)   | PixNerd-XL/16 | 700M   | 2.42  | [🤗](https://huggingface.co/MCG-NJU/PixNerd-XL-P16-C2I/blob/main/res512_ft200k_epoch%3D325-step%3D1800000_emainit.ckpt) |
-
-| Dataset       | Model         | Params | GenEval | DPG  | HuggingFace                                              |
-|---------------|---------------|--------|------|------|----------------------------------------------------------|
-| Text-to-Image | PixNerd-XXL/16| 1.2B | 0.73 | 80.9 | [🤗](https://huggingface.co/MCG-NJU/PixNerd-XXL-P16-T2I) |
-## Online Demos
-![](./figs/demo.png)
-We provide online demos for PixNerd-XXL/16(text-to-image) on HuggingFace Spaces.
-
-强烈建议本地部署玩玩，线上的模型推理速度会慢一些。以及因为这个我把任意分辨率和动画都关了。
-
-HF spaces: [https://huggingface.co/spaces/MCG-NJU/PixNerd](https://huggingface.co/spaces/MCG-NJU/PixNerd)
-
-To host the local gradio demo (Diffusers-style pipeline), run:
 ```bash
-# for text-to-image applications
-python app.py --pretrained_model_name_or_path MCG-NJU/PixNerd-XXL-P16-T2I
-```
-
-## Usages
-For C2i(ImageNet), We use ADM evaluation suite to report FID.
-```bash
-# for installation
 pip install -r requirements.txt
 ```
 
+## Sample from CLI
+
 ```bash
-# inference (DiffusionPipeline)
+python main.py sample \
+  --pretrained_model_name_or_path MCG-NJU/PixNerd-XXL-P16-T2I \
+  --prompt "a photo of a cat" \
+  --num_images_per_prompt 4 \
+  --output_dir samples
+```
+
+Class-conditional usage:
+
+```bash
 python main.py sample \
   --pretrained_model_name_or_path path/to/checkpoint \
   --class_label 207 \
@@ -57,24 +33,74 @@ python main.py sample \
   --output_dir samples
 ```
 
-Python API:
+## Sample script (NiT-style)
+
+```bash
+python scripts/sample_pixnerd.py \
+  --model MCG-NJU/PixNerd-XXL-P16-T2I \
+  --prompt "a photo of a cat" \
+  --height 512 \
+  --width 512 \
+  --num-inference-steps 25 \
+  --guidance-scale 4.0 \
+  --timeshift 3.0 \
+  --order 2
+```
+
+## Convert raw ImageNet checkpoints
+
+Batch conversion (both ImageNet256 and ImageNet512):
+
+```bash
+conda activate sakura
+python scripts/convert_raw_imagenet_ckpts.py
+```
+
+This reads:
+
+- `raw/imagenet256/epoch%3D319-step%3D1600000_emainit.ckpt`
+- `raw/imagenet512/res512_ft200k_epoch%3D325-step%3D1800000_emainit.ckpt`
+
+and writes Diffusers-style checkpoints to:
+
+- `pretrained_models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-256`
+- `pretrained_models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-512`
+
+Each converted checkpoint directory is now self-contained and includes:
+
+- `pipeline.py` (single bundled custom pipeline and all needed classes)
+
+So the checkpoint repo only needs `diffusers` + `torch` at runtime.
+
+Single-checkpoint conversion:
+
+```bash
+conda activate sakura
+python scripts/convert_pixnerd_ckpt_to_diffusers.py \
+  --checkpoint raw/imagenet256/epoch%3D319-step%3D1600000_emainit.ckpt \
+  --output pretrained_models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-256
+```
+
+## Python API
+
 ```python
 from diffusers import DiffusionPipeline
 
-pipe = DiffusionPipeline.from_pretrained("path/to/checkpoint", custom_pipeline="src.pixnerd_diffusers.pipelines.pipeline_pixnerd")
+pipe = DiffusionPipeline.from_pretrained(
+    "path/to/checkpoint",
+    custom_pipeline="path/to/checkpoint/pipeline.py",
+)
 images = pipe(prompt="a photo of a cat", num_inference_steps=25, guidance_scale=4.0).images
 ```
 
+## Gradio demo
+
 ```bash
-# for training
-python main.py train \
-  --config configs_c2i/pix256std1_repa_pixnerd_xl.yaml \
-  --output_dir workdirs/pixnerd_xl \
-  --max_steps 800000
+python app.py --pretrained_model_name_or_path MCG-NJU/PixNerd-XXL-P16-T2I
 ```
-For T2i, we use GenEval and DPG to collect metrics.
 
 ## Reference
+
 ```bibtex
 @article{2507.23268,
 Author = {Shuai Wang and Ziteng Gao and Chenhui Zhu and Weilin Huang and Limin Wang},
@@ -83,6 +109,3 @@ Year = {2025},
 Eprint = {arXiv:2507.23268},
 }
 ```
-
-## Acknowledgement
-The code is mainly built upon [FlowDCN](https://github.com/MCG-NJU/FlowDCN) and [DDT](https://github.com/MCG-NJU/DDT).

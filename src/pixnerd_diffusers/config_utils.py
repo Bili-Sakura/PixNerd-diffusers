@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import copy
 import importlib
 from typing import Any, Dict, Iterable, Optional
 
 import torch
-from omegaconf import DictConfig, OmegaConf
 
 
 def to_container(config: Any) -> Any:
-    if isinstance(config, DictConfig):
-        return OmegaConf.to_container(config, resolve=True)
+    if hasattr(config, "items") and not isinstance(config, dict):
+        return {k: to_container(v) for k, v in config.items()}
+    if isinstance(config, list):
+        return [to_container(v) for v in config]
     return config
 
 
@@ -40,7 +42,7 @@ def instantiate_from_spec(spec: Any) -> Any:
 
 
 def clone_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
-    return to_container(OmegaConf.create(to_container(spec)))
+    return copy.deepcopy(to_container(spec))
 
 
 def load_prefixed_state_dict(

@@ -2,6 +2,17 @@ import torch
 import torch.nn as nn
 from typing import List
 
+
+def resolve_conditioner_device(metadata: dict, fallback: torch.device | None = None) -> torch.device:
+    if metadata is None:
+        metadata = {}
+    if "device" in metadata and metadata["device"] is not None:
+        return torch.device(metadata["device"])
+    if fallback is not None:
+        return fallback
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 class BaseConditioner(nn.Module):
     def __init__(self):
         super(BaseConditioner, self).__init__()
@@ -13,7 +24,6 @@ class BaseConditioner(nn.Module):
         raise NotImplementedError()
 
     @torch.no_grad()
-    @torch.autocast("cuda", dtype=torch.bfloat16)
     def __call__(self, y, metadata:dict={}):
         condition = self._impl_condition(y, metadata)
         uncondition = self._impl_uncondition(y, metadata)

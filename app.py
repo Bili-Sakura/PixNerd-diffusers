@@ -1,9 +1,17 @@
-import os
 import argparse
+from pathlib import Path
 import torch
 import gradio as gr
 
-from src.pixnerd_diffusers import PixNerdFlowMatchScheduler, PixNerdPipeline, PixNerdTransformer2DModel
+from diffusers import DiffusionPipeline
+
+
+def resolve_custom_pipeline_path(model_path: str) -> str:
+    local_model_path = Path(model_path)
+    bundled_pipeline = local_model_path / "pipeline.py"
+    if bundled_pipeline.exists():
+        return str(bundled_pipeline)
+    return str(Path(__file__).resolve().parent / "src" / "pixnerd_diffusers" / "pipelines" / "pipeline_pixnerd.py")
 
 
 if __name__ == "__main__":
@@ -12,32 +20,13 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default="cuda")
 
     args = parser.parse_args()
-    if os.path.isdir(args.pretrained_model_name_or_path):
-        transformer = PixNerdTransformer2DModel.from_pretrained(
-            os.path.join(args.pretrained_model_name_or_path, "transformer"),
-            low_cpu_mem_usage=False,
-        )
-        scheduler = PixNerdFlowMatchScheduler.from_pretrained(
-            os.path.join(args.pretrained_model_name_or_path, "scheduler")
-        )
-    else:
-        transformer = PixNerdTransformer2DModel.from_pretrained(
-            args.pretrained_model_name_or_path,
-            subfolder="transformer",
-            low_cpu_mem_usage=False,
-        )
-        scheduler = PixNerdFlowMatchScheduler.from_pretrained(
-            args.pretrained_model_name_or_path,
-            subfolder="scheduler",
-        )
 
     dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
-    transformer = transformer.to(dtype=dtype, device=args.device)
-    pipeline = PixNerdPipeline(
-        vae=transformer.vae,
-        conditioner=transformer.conditioner,
-        transformer=transformer.get_inference_denoiser(use_ema=True),
-        scheduler=scheduler,
+    custom_pipeline = resolve_custom_pipeline_path(args.pretrained_model_name_or_path)
+    pipeline = DiffusionPipeline.from_pretrained(
+        args.pretrained_model_name_or_path,
+        custom_pipeline=custom_pipeline,
+        torch_dtype=dtype,
     ).to(args.device)
 
     def generate(prompt, num_images, seed, image_height, image_width, num_steps, guidance, timeshift, order):

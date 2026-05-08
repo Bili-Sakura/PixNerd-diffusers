@@ -9,7 +9,6 @@ from diffusers.image_processor import VaeImageProcessor
 from diffusers.utils import BaseOutput
 from PIL import Image
 
-from src.models.autoencoder.base import fp2uint8
 from src.pixnerd_diffusers.schedulers.scheduling_pixnerd_flow_match import PixNerdFlowMatchScheduler
 
 
@@ -25,8 +24,20 @@ class PixNerdPipeline(DiffusionPipeline):
     model_cpu_offload_seq = "conditioner->transformer->vae"
     _callback_tensor_inputs = ["latents"]
 
-    def __init__(self, vae, conditioner, transformer, scheduler: PixNerdFlowMatchScheduler):
+    def __init__(
+        self,
+        transformer,
+        scheduler: PixNerdFlowMatchScheduler,
+        vae=None,
+        conditioner=None,
+    ):
         super().__init__()
+        if vae is None:
+            vae = getattr(transformer, "vae", None)
+        if conditioner is None:
+            conditioner = getattr(transformer, "conditioner", None)
+        if vae is None or conditioner is None:
+            raise ValueError("Pipeline requires `vae` and `conditioner` either explicitly or from `transformer`.")
         self.register_modules(
             vae=vae,
             conditioner=conditioner,
@@ -34,6 +45,10 @@ class PixNerdPipeline(DiffusionPipeline):
             scheduler=scheduler,
         )
         self.image_processor = VaeImageProcessor(vae_scale_factor=1)
+
+    @staticmethod
+    def _fp_to_uint8(image: torch.Tensor) -> torch.Tensor:
+        return torch.clip_((image + 1) * 127.5 + 0.5, 0, 255).to(torch.uint8)
 
     @staticmethod
     def _to_list(y: ConditioningInput) -> List[Union[str, int]]:
@@ -56,8 +71,9 @@ class PixNerdPipeline(DiffusionPipeline):
         num_images_per_prompt: int,
     ):
         prompts = self._repeat(self._to_list(prompt), num_images_per_prompt)
+        metadata = {"device": self._execution_device}
         with torch.no_grad():
-            cond, uncond = self.conditioner(prompts, {})
+            cond, uncond = self.conditioner(prompts, metadata)
         return cond, uncond, prompts
 
     def prepare_latents(
@@ -108,8 +124,9 @@ class PixNerdPipeline(DiffusionPipeline):
         cond, default_uncond, prompts = self.encode_prompt(prompt, num_images_per_prompt)
         if negative_prompt is not None:
             negative = self._repeat(self._to_list(negative_prompt), num_images_per_prompt)
+            metadata = {"device": self._execution_device}
             with torch.no_grad():
-                _, uncond = self.conditioner(negative, {})
+                _, uncond = self.conditioner(negative, metadata)
         else:
             uncond = default_uncond
         batch_size = len(prompts)
@@ -147,7 +164,7 @@ class PixNerdPipeline(DiffusionPipeline):
             ).prev_sample
 
         image = self.vae.decode(latents)
-        images_uint8 = fp2uint8(image).permute(0, 2, 3, 1).cpu().numpy()
+        images_uint8 = self._fp_to_uint8(image).permute(0, 2, 3, 1).cpu().numpy()
         if output_type == "pil":
             output = [Image.fromarray(img) for img in images_uint8]
         elif output_type == "pt":

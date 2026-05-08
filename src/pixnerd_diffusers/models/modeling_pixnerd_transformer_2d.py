@@ -56,6 +56,14 @@ class PixNerdTransformer2DModel(ModelMixin, ConfigMixin):
         if self.ema_denoiser is not None:
             self.sync_ema()
 
+    @property
+    def patch_size(self) -> int:
+        return int(getattr(self.denoiser, "patch_size", 1))
+
+    @property
+    def in_channels(self) -> int:
+        return int(getattr(self.denoiser, "in_channels", 3))
+
     @classmethod
     def from_project_config(
         cls,

@@ -8,7 +8,6 @@ class BaseAE(torch.nn.Module):
         self.scale = scale
         self.shift = shift
 
-    @torch.autocast("cuda", dtype=torch.bfloat16)
     def encode(self, x):
         return self._impl_encode(x) #.to(torch.bfloat16)
 
