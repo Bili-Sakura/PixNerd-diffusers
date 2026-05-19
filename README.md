@@ -1,13 +1,26 @@
-# PixNerd Diffusers Refactor
+# PixNerd Diffusers
 
-This repository is refactored to a Diffusers-first inference flow inspired by
-[NiT-diffusers](https://github.com/Bili-Sakura/NiT-diffusers):
+Diffusers-style implementation of [PixNerd](https://arxiv.org/abs/2507.23268) (Pixel Neural Field Diffusion), following the layout of [NiT-diffusers](https://github.com/Bili-Sakura/NiT-diffusers).
 
-- legacy `src/diffusion/*` training/sampling stack removed
-- runtime entrypoints use `diffusers.DiffusionPipeline.from_pretrained(...)`
-- PixNerd custom model/scheduler/pipeline stay in `src/pixnerd_diffusers`
+Legacy training stacks, spec-based model loaders, and bundled checkpoint pipelines have been removed. Inference uses native Diffusers components under `src/diffusers`.
+
+## Package layout
+
+- `src/diffusers/models/transformers/transformer_pixnerd.py` — `PixNerdTransformer2DModel` and `PixNerDiT`
+- `src/diffusers/models/autoencoders/autoencoder_pixel.py` — `PixNerdPixelVAE`
+- `src/diffusers/models/conditioners/conditioner_pixnerd.py` — `PixNerdLabelConditioner`
+- `src/diffusers/schedulers/scheduling_flow_match_pixnerd.py` — `PixNerdFlowMatchScheduler`
+- `src/diffusers/pipelines/pixnerd/pipeline_pixnerd.py` — `PixNerdPipeline`
+- `scripts/convert_pixnerd_ckpt_to_diffusers.py` — convert raw `.ckpt` files to a Diffusers pipeline directory
+- `scripts/sample_pixnerd.py` — sample from a converted pipeline
 
 ## Install
+
+```bash
+pip install -e .
+```
+
+Or install dependencies only:
 
 ```bash
 pip install -r requirements.txt
@@ -17,28 +30,18 @@ pip install -r requirements.txt
 
 ```bash
 python main.py sample \
-  --pretrained_model_name_or_path MCG-NJU/PixNerd-XXL-P16-T2I \
-  --prompt "a photo of a cat" \
-  --num_images_per_prompt 4 \
-  --output_dir samples
-```
-
-Class-conditional usage:
-
-```bash
-python main.py sample \
-  --pretrained_model_name_or_path path/to/checkpoint \
+  --pretrained_model_name_or_path path/to/converted-checkpoint \
   --class_label 207 \
   --num_images_per_prompt 4 \
   --output_dir samples
 ```
 
-## Sample script (NiT-style)
+## Sample script
 
 ```bash
 python scripts/sample_pixnerd.py \
-  --model MCG-NJU/PixNerd-XXL-P16-T2I \
-  --prompt "a photo of a cat" \
+  --model path/to/converted-checkpoint \
+  --class-label 207 \
   --height 512 \
   --width 512 \
   --num-inference-steps 25 \
@@ -49,63 +52,50 @@ python scripts/sample_pixnerd.py \
 
 ## Convert raw ImageNet checkpoints
 
-Batch conversion (both ImageNet256 and ImageNet512):
-
 ```bash
-conda activate sakura
-python scripts/convert_raw_imagenet_ckpts.py
-```
-
-This reads:
-
-- `raw/imagenet256/epoch%3D319-step%3D1600000_emainit.ckpt`
-- `raw/imagenet512/res512_ft200k_epoch%3D325-step%3D1800000_emainit.ckpt`
-
-and writes Diffusers-style checkpoints to:
-
-- `pretrained_models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-256`
-- `pretrained_models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-512`
-
-Each converted checkpoint directory is now self-contained and includes:
-
-- `pipeline.py` (single bundled custom pipeline and all needed classes)
-
-So the checkpoint repo only needs `diffusers` + `torch` at runtime.
-
-Single-checkpoint conversion:
-
-```bash
-conda activate sakura
 python scripts/convert_pixnerd_ckpt_to_diffusers.py \
   --checkpoint raw/imagenet256/epoch%3D319-step%3D1600000_emainit.ckpt \
   --output pretrained_models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-256
 ```
 
+Batch conversion:
+
+```bash
+python scripts/convert_raw_imagenet_ckpts.py
+```
+
+Converted directories contain `model_index.json`, separate `transformer/`, `scheduler/`, `vae/`, and `conditioner/` subfolders compatible with `PixNerdPipeline.from_pretrained`.
+
 ## Python API
 
 ```python
-from diffusers import DiffusionPipeline
+import sys
+from pathlib import Path
 
-pipe = DiffusionPipeline.from_pretrained(
-    "path/to/checkpoint",
-    custom_pipeline="path/to/checkpoint/pipeline.py",
-)
-images = pipe(prompt="a photo of a cat", num_inference_steps=25, guidance_scale=4.0).images
+sys.path.insert(0, str(Path("src").resolve()))
+from diffusers import PixNerdPipeline
+
+pipe = PixNerdPipeline.from_pretrained("path/to/converted-checkpoint", torch_dtype=torch.bfloat16)
+images = pipe(prompt=[207], num_inference_steps=25, guidance_scale=4.0).images
 ```
 
 ## Gradio demo
 
 ```bash
-python app.py --pretrained_model_name_or_path MCG-NJU/PixNerd-XXL-P16-T2I
+python app.py --pretrained_model_name_or_path path/to/converted-checkpoint
 ```
+
+## Upstreaming to Diffusers
+
+Copy the files under `src/diffusers` into the matching locations in the `huggingface/diffusers` repository and register the classes in Diffusers' lazy import tables.
 
 ## Reference
 
 ```bibtex
 @article{2507.23268,
-Author = {Shuai Wang and Ziteng Gao and Chenhui Zhu and Weilin Huang and Limin Wang},
-Title = {PixNerd: Pixel Neural Field Diffusion},
-Year = {2025},
-Eprint = {arXiv:2507.23268},
+  Author = {Shuai Wang and Ziteng Gao and Chenhui Zhu and Weilin Huang and Limin Wang},
+  Title = {PixNerd: Pixel Neural Field Diffusion},
+  Year = {2025},
+  Eprint = {arXiv:2507.23268},
 }
 ```

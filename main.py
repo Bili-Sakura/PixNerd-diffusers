@@ -1,10 +1,16 @@
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import List, Union
 
 import torch
-from diffusers import DiffusionPipeline
+
+REPO_SRC = Path(__file__).resolve().parent / "src"
+if str(REPO_SRC) not in sys.path:
+    sys.path.insert(0, str(REPO_SRC))
+
+from diffusers import PixNerdPipeline
 
 
 def parse_conditioning_inputs(prompt: str, class_label: str) -> Union[List[str], List[int]]:
@@ -15,20 +21,10 @@ def parse_conditioning_inputs(prompt: str, class_label: str) -> Union[List[str],
     raise ValueError("Either --prompt or --class_label must be provided.")
 
 
-def resolve_custom_pipeline_path(model_path: str) -> str:
-    local_model_path = Path(model_path)
-    bundled_pipeline = local_model_path / "pipeline.py"
-    if bundled_pipeline.exists():
-        return str(bundled_pipeline)
-    return str(Path(__file__).resolve().parent / "src" / "pixnerd_diffusers" / "pipelines" / "pipeline_pixnerd.py")
-
-
 def run_sample(args: argparse.Namespace) -> None:
     dtype = torch.bfloat16 if args.dtype == "bf16" else torch.float16 if args.dtype == "fp16" else torch.float32
-    custom_pipeline = resolve_custom_pipeline_path(args.pretrained_model_name_or_path)
-    pipeline = DiffusionPipeline.from_pretrained(
+    pipeline = PixNerdPipeline.from_pretrained(
         args.pretrained_model_name_or_path,
-        custom_pipeline=custom_pipeline,
         torch_dtype=dtype,
     ).to(args.device)
 
@@ -56,7 +52,7 @@ def main():
     parser = argparse.ArgumentParser(description="PixNerd Diffusers inference entrypoint")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    sample_parser = subparsers.add_parser("sample", help="Run inference through DiffusionPipeline")
+    sample_parser = subparsers.add_parser("sample", help="Run inference through PixNerdPipeline")
     sample_parser.add_argument("--pretrained_model_name_or_path", type=str, required=True)
     sample_parser.add_argument("--prompt", type=str, default=None, help="Use ||| to separate prompts.")
     sample_parser.add_argument("--class_label", type=str, default=None, help="Comma separated class labels.")

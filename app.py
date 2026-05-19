@@ -1,31 +1,31 @@
 import argparse
+import sys
 from pathlib import Path
-import torch
+
 import gradio as gr
+import torch
 
-from diffusers import DiffusionPipeline
+REPO_SRC = Path(__file__).resolve().parent / "src"
+if str(REPO_SRC) not in sys.path:
+    sys.path.insert(0, str(REPO_SRC))
 
-
-def resolve_custom_pipeline_path(model_path: str) -> str:
-    local_model_path = Path(model_path)
-    bundled_pipeline = local_model_path / "pipeline.py"
-    if bundled_pipeline.exists():
-        return str(bundled_pipeline)
-    return str(Path(__file__).resolve().parent / "src" / "pixnerd_diffusers" / "pipelines" / "pipeline_pixnerd.py")
+from diffusers import PixNerdPipeline
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pretrained_model_name_or_path", type=str, default="MCG-NJU/PixNerd-XXL-P16-T2I")
+    parser.add_argument(
+        "--pretrained_model_name_or_path",
+        type=str,
+        default="pretrained_models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-256",
+    )
     parser.add_argument("--device", type=str, default="cuda")
 
     args = parser.parse_args()
 
     dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
-    custom_pipeline = resolve_custom_pipeline_path(args.pretrained_model_name_or_path)
-    pipeline = DiffusionPipeline.from_pretrained(
+    pipeline = PixNerdPipeline.from_pretrained(
         args.pretrained_model_name_or_path,
-        custom_pipeline=custom_pipeline,
         torch_dtype=dtype,
     ).to(args.device)
 
@@ -53,7 +53,7 @@ if __name__ == "__main__":
                 image_height = gr.Slider(minimum=128, maximum=1024, step=32, label="image height", value=512)
                 image_width = gr.Slider(minimum=128, maximum=1024, step=32, label="image width", value=512)
                 num_images = gr.Slider(minimum=1, maximum=4, step=1, label="num images", value=4)
-                label = gr.Textbox(label="positive prompt", value="a photo of a cat")
+                label = gr.Textbox(label="class label (integer)", value="207")
                 seed = gr.Slider(minimum=0, maximum=1000000, step=1, label="seed", value=0)
                 timeshift = gr.Slider(minimum=0.1, maximum=5.0, step=0.1, label="timeshift", value=3.0)
                 order = gr.Slider(minimum=1, maximum=4, step=1, label="order", value=2)

@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 
 import argparse
+import sys
 from pathlib import Path
 
 import torch
-from diffusers import DiffusionPipeline
+
+REPO_SRC = Path(__file__).resolve().parents[1] / "src"
+if str(REPO_SRC) not in sys.path:
+    sys.path.insert(0, str(REPO_SRC))
+
+from diffusers import PixNerdPipeline
 
 
 def parse_conditioning_inputs(prompt: str | None, class_label: list[int] | None):
@@ -16,8 +22,8 @@ def parse_conditioning_inputs(prompt: str | None, class_label: list[int] | None)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Sample images with the PixNerd Diffusers pipeline.")
-    parser.add_argument("--model", required=True, help="Path or Hub id of a Diffusers-style PixNerd pipeline.")
+    parser = argparse.ArgumentParser(description="Sample images with a converted Diffusers-style PixNerd pipeline.")
+    parser.add_argument("--model", required=True, help="Path or Hub id of a converted PixNerd pipeline.")
     parser.add_argument("--prompt", default=None, help="Text prompts split by |||.")
     parser.add_argument("--class-label", type=int, action="append", default=None, help="Class id. Repeat for batches.")
     parser.add_argument("--num-images-per-prompt", type=int, default=1)
@@ -34,15 +40,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def resolve_custom_pipeline_path(model_path: str) -> str:
-    local_model_path = Path(model_path)
-    bundled_pipeline = local_model_path / "pipeline.py"
-    if bundled_pipeline.exists():
-        return str(bundled_pipeline)
-    repo_root = Path(__file__).resolve().parents[1]
-    return str(repo_root / "src" / "pixnerd_diffusers" / "pipelines" / "pipeline_pixnerd.py")
-
-
 def main():
     args = parse_args()
     dtype = {"float32": torch.float32, "float16": torch.float16, "bfloat16": torch.bfloat16}[args.torch_dtype]
@@ -51,12 +48,7 @@ def main():
     if args.seed is not None:
         generator.manual_seed(args.seed)
 
-    custom_pipeline = resolve_custom_pipeline_path(args.model)
-    pipe = DiffusionPipeline.from_pretrained(
-        args.model,
-        custom_pipeline=custom_pipeline,
-        torch_dtype=dtype,
-    ).to(args.device)
+    pipe = PixNerdPipeline.from_pretrained(args.model, torch_dtype=dtype).to(args.device)
     output = pipe(
         prompt=parse_conditioning_inputs(args.prompt, args.class_label),
         num_images_per_prompt=args.num_images_per_prompt,

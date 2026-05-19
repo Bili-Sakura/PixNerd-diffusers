@@ -1,31 +1,30 @@
 PixNerd Diffusers integration
 =============================
 
-This repository now keeps only a Diffusers-first inference path.
+Native Diffusers components live under `src/diffusers`:
 
-- `src/pixnerd_diffusers/models/modeling_pixnerd_transformer_2d.py` defines
-  `PixNerdTransformer2DModel` (`ModelMixin` + `ConfigMixin`).
-- `src/pixnerd_diffusers/schedulers/scheduling_pixnerd_flow_match.py` defines
-  `PixNerdFlowMatchScheduler`.
-- `src/pixnerd_diffusers/pipelines/pipeline_pixnerd.py` defines
-  `PixNerdPipeline`.
-- `scripts/sample_pixnerd.py` is a standalone sample script.
+- `models/transformers/transformer_pixnerd.py` — `PixNerdTransformer2DModel`
+- `models/autoencoders/autoencoder_pixel.py` — `PixNerdPixelVAE`
+- `models/conditioners/conditioner_pixnerd.py` — `PixNerdLabelConditioner`
+- `schedulers/scheduling_flow_match_pixnerd.py` — `PixNerdFlowMatchScheduler`
+- `pipelines/pixnerd/pipeline_pixnerd.py` — `PixNerdPipeline`
 
-Sample
-------
+Install and sample:
 
 ```bash
+pip install -e .
+
 python scripts/sample_pixnerd.py \
-  --model MCG-NJU/PixNerd-XXL-P16-T2I \
-  --prompt "a photo of a cat" \
+  --model path/to/converted-checkpoint \
+  --class-label 207 \
   --num-inference-steps 25 \
   --guidance-scale 4.0
 ```
 
-For CLI usage through the repository entrypoint:
+Convert a raw checkpoint:
 
 ```bash
-python main.py sample \
-  --pretrained_model_name_or_path MCG-NJU/PixNerd-XXL-P16-T2I \
-  --prompt "a photo of a cat"
+python scripts/convert_pixnerd_ckpt_to_diffusers.py \
+  --checkpoint raw/imagenet256/epoch%3D319-step%3D1600000_emainit.ckpt \
+  --output pretrained_models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-256
 ```
