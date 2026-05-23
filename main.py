@@ -27,18 +27,18 @@ def run_sample(args: argparse.Namespace) -> None:
         args.pretrained_model_name_or_path,
         torch_dtype=dtype,
     ).to(args.device)
+    pipeline.scheduler.timeshift = args.timeshift
+    pipeline.scheduler.order = args.order
 
     conditioning = parse_conditioning_inputs(args.prompt, args.class_label)
     output = pipeline(
-        prompt=conditioning,
+        class_labels=conditioning,
         num_images_per_prompt=args.num_images_per_prompt,
         height=args.height,
         width=args.width,
         num_inference_steps=args.num_steps,
         guidance_scale=args.guidance_scale,
         generator=torch.Generator(device=args.device).manual_seed(args.seed) if args.seed is not None else None,
-        timeshift=args.timeshift,
-        order=args.order,
         output_type="pil",
     ).images
 

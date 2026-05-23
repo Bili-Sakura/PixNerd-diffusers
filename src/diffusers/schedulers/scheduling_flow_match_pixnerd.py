@@ -172,10 +172,14 @@ class PixNerdFlowMatchScheduler(SchedulerMixin, ConfigMixin):
             self.num_inference_steps = int(num_inference_steps)
         if timeshift is not None:
             self.timeshift = float(timeshift)
+        else:
+            self.timeshift = float(getattr(self.config, "timeshift", self.timeshift))
         if guidance_scale is not None:
             self.guidance_scale = float(guidance_scale)
         if order is not None:
             self.order = int(order)
+        else:
+            self.order = int(getattr(self.config, "order", self.order))
 
         timesteps, timedeltas, solver_coeffs = self._build_solver_state(
             self.num_inference_steps,

@@ -25,6 +25,15 @@ class PixNerdPixelVAE(ModelMixin, ConfigMixin):
         super().__init__()
         self.scale = float(scale)
         self.shift = float(shift)
+        self.register_buffer("_diffusers_device_anchor", torch.zeros(0), persistent=False)
+
+    @property
+    def dtype(self) -> torch.dtype:
+        return self._diffusers_device_anchor.dtype
+
+    @property
+    def device(self) -> torch.device:
+        return self._diffusers_device_anchor.device
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         return x / self.scale + self.shift

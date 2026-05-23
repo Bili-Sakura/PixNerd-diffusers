@@ -15,7 +15,7 @@ from convert_pixnerd_ckpt_to_diffusers import convert_checkpoint
 
 def main() -> None:
     repo_root = REPO_ROOT
-    output_root = repo_root / "pretrained_models" / "BiliSakura" / "PixNerd-diffusers"
+    output_root = repo_root / "models" / "BiliSakura" / "PixNerd-diffusers"
 
     jobs = [
         {

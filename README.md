@@ -55,7 +55,7 @@ python scripts/sample_pixnerd.py \
 ```bash
 python scripts/convert_pixnerd_ckpt_to_diffusers.py \
   --checkpoint raw/imagenet256/epoch%3D319-step%3D1600000_emainit.ckpt \
-  --output pretrained_models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-256
+  --output models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-256
 ```
 
 Batch conversion:
@@ -75,8 +75,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path("src").resolve()))
 from diffusers import PixNerdPipeline
 
-pipe = PixNerdPipeline.from_pretrained("path/to/converted-checkpoint", torch_dtype=torch.bfloat16)
-images = pipe(prompt=[207], num_inference_steps=25, guidance_scale=4.0).images
+pipe = PixNerdPipeline.from_pretrained(
+    "models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-512",
+    torch_dtype=torch.bfloat16,
+)
+images = pipe(class_labels="golden retriever", num_inference_steps=25, guidance_scale=4.0).images
 ```
 
 ## Gradio demo

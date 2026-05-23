@@ -49,15 +49,15 @@ def main():
         generator.manual_seed(args.seed)
 
     pipe = PixNerdPipeline.from_pretrained(args.model, torch_dtype=dtype).to(args.device)
+    pipe.scheduler.timeshift = args.timeshift
+    pipe.scheduler.order = args.order
     output = pipe(
-        prompt=parse_conditioning_inputs(args.prompt, args.class_label),
+        class_labels=parse_conditioning_inputs(args.prompt, args.class_label),
         num_images_per_prompt=args.num_images_per_prompt,
         height=args.height,
         width=args.width,
         num_inference_steps=args.num_inference_steps,
         guidance_scale=args.guidance_scale,
-        timeshift=args.timeshift,
-        order=args.order,
         generator=generator,
     )
 

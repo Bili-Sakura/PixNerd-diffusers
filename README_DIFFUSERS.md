@@ -26,5 +26,5 @@ Convert a raw checkpoint:
 ```bash
 python scripts/convert_pixnerd_ckpt_to_diffusers.py \
   --checkpoint raw/imagenet256/epoch%3D319-step%3D1600000_emainit.ckpt \
-  --output pretrained_models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-256
+  --output models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-256
 ```

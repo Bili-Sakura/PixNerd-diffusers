@@ -17,29 +17,31 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pretrained_model_name_or_path",
         type=str,
-        default="pretrained_models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-256",
+        default="models/BiliSakura/PixNerd-diffusers/PixNerd-XL-16-256",
     )
     parser.add_argument("--device", type=str, default="cuda")
 
     args = parser.parse_args()
 
-    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
     pipeline = PixNerdPipeline.from_pretrained(
         args.pretrained_model_name_or_path,
-        torch_dtype=dtype,
+        torch_dtype=torch.bfloat16,
     ).to(args.device)
+    pipeline.scheduler.timeshift = float(args.timeshift)
+    pipeline.scheduler.order = int(args.order)
 
-    def generate(prompt, num_images, seed, image_height, image_width, num_steps, guidance, timeshift, order):
+    def generate(class_label, num_images, seed, image_height, image_width, num_steps, guidance, timeshift, order):
+        label = int(class_label) if str(class_label).strip().isdigit() else class_label
+        pipeline.scheduler.timeshift = float(timeshift)
+        pipeline.scheduler.order = int(order)
         images = pipeline(
-            prompt=prompt,
+            class_labels=label,
             num_images_per_prompt=int(num_images),
-            generator=torch.Generator(device="cpu").manual_seed(int(seed)),
+            generator=torch.Generator(device=args.device).manual_seed(int(seed)),
             height=int(image_height),
             width=int(image_width),
             num_inference_steps=int(num_steps),
             guidance_scale=float(guidance),
-            timeshift=float(timeshift),
-            order=int(order),
             output_type="pil",
         ).images
         return images
@@ -50,11 +52,11 @@ if __name__ == "__main__":
             with gr.Column(scale=1):
                 num_steps = gr.Slider(minimum=1, maximum=100, step=1, label="num steps", value=25)
                 guidance = gr.Slider(minimum=0.1, maximum=10.0, step=0.1, label="CFG", value=4.0)
-                image_height = gr.Slider(minimum=128, maximum=1024, step=32, label="image height", value=512)
-                image_width = gr.Slider(minimum=128, maximum=1024, step=32, label="image width", value=512)
-                num_images = gr.Slider(minimum=1, maximum=4, step=1, label="num images", value=4)
-                label = gr.Textbox(label="class label (integer)", value="207")
-                seed = gr.Slider(minimum=0, maximum=1000000, step=1, label="seed", value=0)
+                image_height = gr.Slider(minimum=128, maximum=1024, step=16, label="image height", value=256)
+                image_width = gr.Slider(minimum=128, maximum=1024, step=16, label="image width", value=256)
+                num_images = gr.Slider(minimum=1, maximum=4, step=1, label="num images", value=1)
+                label = gr.Textbox(label="class label (string or integer id)", value="golden retriever")
+                seed = gr.Slider(minimum=0, maximum=1000000, step=1, label="seed", value=42)
                 timeshift = gr.Slider(minimum=0.1, maximum=5.0, step=0.1, label="timeshift", value=3.0)
                 order = gr.Slider(minimum=1, maximum=4, step=1, label="order", value=2)
             with gr.Column(scale=2):
